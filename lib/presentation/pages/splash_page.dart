@@ -34,7 +34,7 @@ class _SplashPageState extends State<SplashPage> {
     if (tokenStorage.isLoggedIn && tokenStorage.hasToken) {
       context.go('/home');
     } else {
-      context.go('/login');
+      context.go('/register1');
     }
   }
 
