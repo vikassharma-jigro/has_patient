@@ -533,11 +533,9 @@ class _BasicDetailsStep extends StatelessWidget {
                         label: 'ID Proof Type',
                         hintText: 'Select type',
                         items: const [
-                          'Aadhar Card',
-                          'PAN Card',
+                          'Aadhaar',
+                          'PAN',
                           'Voter ID',
-                          'Driving License',
-                          'Passport',
                         ],
                         value: state.idProofType.isEmpty
                             ? null
@@ -581,16 +579,12 @@ class _BasicDetailsStep extends StatelessWidget {
 
   String _idProofLabel(String type) {
     switch (type) {
-      case 'Aadhar Card':
-        return 'Aadhar Number';
-      case 'PAN Card':
+      case 'Aadhaar':
+        return 'Aadhaar Number';
+      case 'PAN':
         return 'PAN Number';
       case 'Voter ID':
         return 'Voter ID Number';
-      case 'Driving License':
-        return 'DL Number';
-      case 'Passport':
-        return 'Passport Number';
       default:
         return 'ID Proof Number';
     }
@@ -598,16 +592,12 @@ class _BasicDetailsStep extends StatelessWidget {
 
   String _idProofHint(String type) {
     switch (type) {
-      case 'Aadhar Card':
-        return 'Enter 12-digit Aadhar';
-      case 'PAN Card':
+      case 'Aadhaar':
+        return 'Enter 12-digit Aadhaar';
+      case 'PAN':
         return 'e.g. ABCDE1234F';
       case 'Voter ID':
         return 'e.g. ABC1234567';
-      case 'Driving License':
-        return 'e.g. DL0420110149646';
-      case 'Passport':
-        return 'e.g. A1234567';
       default:
         return 'Enter ID number';
     }
@@ -832,6 +822,8 @@ class _InsuranceStep extends StatelessWidget {
                           label: 'Insurance Type',
                           hintText: 'Select insurance type',
                           items: const [
+                            'Self',
+                            'Govt',
                             'Life Insurance',
                             'Health Insurance',
                             'General',
@@ -927,6 +919,72 @@ class _InsuranceStep extends StatelessWidget {
                       ],
                     )
                   : const SizedBox.shrink(),
+            ),
+
+            AppSpacing.h16(context),
+
+            // Serious Diseases Selection
+            Text(
+              'Serious Diseases',
+              style: AppTypography.bodySmall.semiBold.responsive(context),
+            ),
+            AppSpacing.h8(context),
+            BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
+              buildWhen: (p, c) => p.seriousDiseases != c.seriousDiseases,
+              builder: (context, state) {
+                const options = [
+                  "HIV",
+                  "TB",
+                  "HB",
+                  "Cancer",
+                  "None",
+                  "Other",
+                ];
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children:
+                      options.map((option) {
+                        final isSelected = state.seriousDiseases.contains(
+                          option,
+                        );
+                        return FilterChip(
+                          label: Text(
+                            option,
+                            style: AppTypography.labelSmall.copyWith(
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: AppColors.secondary,
+                          checkmarkColor: Colors.white,
+                          backgroundColor: AppColors.grey100,
+                          onSelected: (selected) {
+                            final current = List<String>.from(
+                              state.seriousDiseases,
+                            );
+                            if (selected) {
+                              if (option == "None") {
+                                current.clear();
+                                current.add("None");
+                              } else {
+                                current.remove("None");
+                                current.add(option);
+                              }
+                            } else {
+                              current.remove(option);
+                            }
+                            context.read<PatientRegistrationBloc>().add(
+                              UpdateFieldEvent(seriousDiseases: current),
+                            );
+                          },
+                        );
+                      }).toList(),
+                );
+              },
             ),
           ],
         ),
@@ -1114,6 +1172,14 @@ class _ReviewStep extends StatelessWidget {
                   'Allergy Details',
                   state.allergyDetail.ifEmpty('-'),
                 ),
+              _ReviewRowData(
+                'Serious Diseases',
+                state.seriousDiseases.isEmpty
+                    ? '-'
+                    : state.seriousDiseases.join(', '),
+                '',
+                '',
+              ),
             ],
           ),
           AppSpacing.h24(context),

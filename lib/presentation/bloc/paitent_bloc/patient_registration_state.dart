@@ -42,6 +42,7 @@ class PatientRegistrationState extends Equatable {
     this.allergyName = '',
     this.allergyDetail = '',
     // Step 3 — Review
+    this.seriousDiseases = const [],
     this.isConfirmed = false,
   });
 
@@ -78,6 +79,7 @@ class PatientRegistrationState extends Equatable {
   final String allergyDetail;
 
   // Step 3
+  final List<String> seriousDiseases;
   final bool isConfirmed;
 
   // FIX BUG 19: insuranceType uses sentinel so it can be cleared to null.
@@ -109,6 +111,7 @@ class PatientRegistrationState extends Equatable {
     bool? anyAllergy,
     String? allergyName,
     String? allergyDetail,
+    List<String>? seriousDiseases,
     bool? isConfirmed,
   }) {
     return PatientRegistrationState(
@@ -142,6 +145,7 @@ class PatientRegistrationState extends Equatable {
       anyAllergy: anyAllergy ?? this.anyAllergy,
       allergyName: allergyName ?? this.allergyName,
       allergyDetail: allergyDetail ?? this.allergyDetail,
+      seriousDiseases: seriousDiseases ?? this.seriousDiseases,
       isConfirmed: isConfirmed ?? this.isConfirmed,
     );
   }
@@ -175,6 +179,7 @@ class PatientRegistrationState extends Equatable {
     anyAllergy,
     allergyName,
     allergyDetail,
+    seriousDiseases,
     isConfirmed,
   ];
 }

@@ -106,30 +106,30 @@ class AppFormValidators {
 
   // ── ID Proof Validators ────────────────────────────────────────────────────
 
-  /// Aadhar — 12 digits, no all-same-digit sequence.
+  /// Aadhaar — 12 digits, no all-same-digit sequence.
   /// FIX BUG 23: Added invalid-sequence check.
   static FormFieldValidator<String> aadhar() {
     return (value) {
       final input = value?.trim().replaceAll(' ', '');
       if (input == null || input.isEmpty) {
-        return 'Please enter Aadhar number';
+        return 'Please enter Aadhaar number';
       }
       if (!RegExp(r'^\d{12}$').hasMatch(input)) {
-        return 'Aadhar number must be exactly 12 digits';
+        return 'Aadhaar number must be exactly 12 digits';
       }
       // Check for trivially invalid numbers (all same digit, all zeros, etc.)
       if (RegExp(r'^(\d)\1{11}$').hasMatch(input)) {
-        return 'Please enter a valid Aadhar number';
+        return 'Please enter a valid Aadhaar number';
       }
       // First digit cannot be 0 or 1
       if (input[0] == '0' || input[0] == '1') {
-        return 'Aadhar number cannot start with 0 or 1';
+        return 'Aadhaar number cannot start with 0 or 1';
       }
       return null;
     };
   }
 
-  /// PAN Card — format: AAAAA9999A
+  /// PAN — format: AAAAA9999A
   static FormFieldValidator<String> pan() {
     return (value) {
       final input = value?.trim().toUpperCase();
@@ -188,9 +188,9 @@ class AppFormValidators {
   static FormFieldValidator<String> idProof(String idProofType) {
     return (value) {
       switch (idProofType) {
-        case 'Aadhar Card':
+        case 'Aadhaar':
           return aadhar()(value);
-        case 'PAN Card':
+        case 'PAN':
           return pan()(value);
         case 'Voter ID':
           return voterId()(value);

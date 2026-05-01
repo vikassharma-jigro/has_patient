@@ -48,6 +48,7 @@ final class UpdateFieldEvent extends PatientRegistrationEvent {
     this.anyAllergy,
     this.allergyName,
     this.allergyDetail,
+    this.seriousDiseases,
     this.isConfirmed,
   });
 
@@ -74,6 +75,7 @@ final class UpdateFieldEvent extends PatientRegistrationEvent {
   final bool? anyAllergy;
   final String? allergyName;
   final String? allergyDetail;
+  final List<String>? seriousDiseases;
   final bool? isConfirmed;
 
   @override
@@ -101,6 +103,7 @@ final class UpdateFieldEvent extends PatientRegistrationEvent {
         anyAllergy,
         allergyName,
         allergyDetail,
+        seriousDiseases,
         isConfirmed,
       ];
 }

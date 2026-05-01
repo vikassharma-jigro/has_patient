@@ -8,7 +8,7 @@ class ApiUrls {
   static const String auth = '/api/auth/';
   static const String login = '/api/auth/login';
   static const String register = '/api/patient/register';
-  static const String register1 = '/api/register/identity/';
+  static const String register1 = '/api/patient/register/identity/';
   static const String logout = '/api/auth/logout';
   static const String forgotPassword = '/api/auth/forgot-password';
   static const String setPassword = '/api/auth/set-password';

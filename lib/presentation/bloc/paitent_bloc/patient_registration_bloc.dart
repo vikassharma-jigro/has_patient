@@ -122,6 +122,7 @@ class PatientRegistrationBloc
         anyAllergy: event.anyAllergy,
         allergyName: event.allergyName,
         allergyDetail: event.allergyDetail,
+        seriousDiseases: event.seriousDiseases,
         isConfirmed: event.isConfirmed,
         status: PatientRegistrationStatus.initial,
       ),
@@ -215,13 +216,21 @@ class PatientRegistrationBloc
     final result = await _api.register1Api(
       IDProofNumber: state.idProofNumber,
       IDProofType: state.idProofType,
-      insuranceNumber: state.insuranceNumber,
-      allergy: state.anyAllergy ? state.allergyName : 'None',
+      insuranceNumber:
+          ((state.insuranceType ?? 'Self') == 'Self' ||
+              state.insuranceNumber.trim().isEmpty)
+          ? null
+          : state.insuranceNumber,
+      allergy: state.anyAllergy ? state.allergyName : 'No',
       infection: state.anyInfection ? 'Yes' : 'No',
-      insuranceSchemeName: state.insuranceSchema,
-      insuranceType: state.insuranceType ?? 'None',
+      insuranceSchemeName:
+          ((state.insuranceType ?? 'Self') == 'Self' ||
+              state.insuranceSchema.trim().isEmpty)
+          ? null
+          : state.insuranceSchema,
+      insuranceType: state.insuranceType ?? 'Self',
       id: state.registeredId,
-      seriousDiseases: const [],
+      seriousDiseases: state.seriousDiseases,
     );
 
     switch (result) {

@@ -148,24 +148,26 @@ class ApiBaseHelper {
   Future<ApiResult<Map<String, dynamic>>> register1Api({
     required String IDProofNumber,
     required String IDProofType,
-    required String insuranceNumber,
+    String? insuranceNumber,
     required String allergy,
     required String infection,
-    required String insuranceSchemeName,
+    String? insuranceSchemeName,
     required String insuranceType,
     required String id,
     required List<String> seriousDiseases,
   }) => _execute(
     () => _api.patch(
       "${ApiUrls.register1}$id",
-      data: {
+      data: _clean({
         'IDProofNumber': IDProofNumber,
-        'IDProofType': IDProofType ,'insuranceNumber': insuranceNumber,
-        'allergy': allergy ,'infection': infection,
-        'insuranceSchemeName': insuranceSchemeName ,'insuranceType': insuranceType,
-        'seriousDiseases': seriousDiseases ,
-
-      },
+        'IDProofType': IDProofType,
+        'insuranceNumber': insuranceNumber,
+        'allergy': allergy,
+        'infection': infection,
+        'insuranceSchemeName': insuranceSchemeName,
+        'insuranceType': insuranceType,
+        'seriousDiseases': seriousDiseases,
+      }),
     ),
   );
 
