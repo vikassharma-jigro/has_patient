@@ -114,7 +114,7 @@ class ApiBaseHelper {
   }) => _execute(
     () => _api.post(
       ApiUrls.login,
-      data: {'userId': userId, 'password': password ,'device': 'mob'},
+      data: {'identifier': userId, 'password': password ,'device': 'mob'},
     ),
   );
 
