@@ -7,9 +7,13 @@ sealed class PatientRegistrationEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class NextStepEvent extends PatientRegistrationEvent {}
+class NextStepEvent extends PatientRegistrationEvent {
+  const NextStepEvent();
+}
 
-class PreviousStepEvent extends PatientRegistrationEvent {}
+class PreviousStepEvent extends PatientRegistrationEvent {
+  const PreviousStepEvent();
+}
 
 class JumpToStepEvent extends PatientRegistrationEvent {
   final int step;
@@ -19,31 +23,7 @@ class JumpToStepEvent extends PatientRegistrationEvent {
   List<Object?> get props => [step];
 }
 
-class UpdateFieldEvent extends PatientRegistrationEvent {
-  final String? firstName;
-  final String? lastName;
-  final String? gender;
-  final String? dob;
-  final String? age;
-  final String? mobile;
-  final String? email;
-  final String? address;
-  final String? city;
-  final String? state;
-  final String? pincode;
-  final String? idProofType;
-  final bool? isOPD;
-  final bool? hasInsurance;
-  final String? insuranceType;
-  final String? insuranceSchema;
-  final String? insuranceNumber;
-  final bool? anyInfection;
-  final bool? anyAllergy;
-  final String? allergyName;
-  final String? allergyDetail;
-  final String? selectedDisease;
-  final bool? isConfirmed;
-
+final class UpdateFieldEvent extends PatientRegistrationEvent {
   const UpdateFieldEvent({
     this.firstName,
     this.lastName,
@@ -57,18 +37,44 @@ class UpdateFieldEvent extends PatientRegistrationEvent {
     this.state,
     this.pincode,
     this.idProofType,
+    this.idProofNumber,
     this.isOPD,
     this.hasInsurance,
     this.insuranceType,
+    this.clearInsuranceType = false, // sentinel to explicitly clear nullable
     this.insuranceSchema,
     this.insuranceNumber,
     this.anyInfection,
     this.anyAllergy,
     this.allergyName,
     this.allergyDetail,
-    this.selectedDisease,
     this.isConfirmed,
   });
+
+  final String? firstName;
+  final String? lastName;
+  final String? gender;
+  final String? dob;
+  final String? age;
+  final String? mobile;
+  final String? email;
+  final String? address;
+  final String? city;
+  final String? state;
+  final String? pincode;
+  final String? idProofType;
+  final String? idProofNumber;
+  final bool? isOPD;
+  final bool? hasInsurance;
+  final String? insuranceType;
+  final bool clearInsuranceType;
+  final String? insuranceSchema;
+  final String? insuranceNumber;
+  final bool? anyInfection;
+  final bool? anyAllergy;
+  final String? allergyName;
+  final String? allergyDetail;
+  final bool? isConfirmed;
 
   @override
   List<Object?> get props => [
@@ -84,16 +90,25 @@ class UpdateFieldEvent extends PatientRegistrationEvent {
         state,
         pincode,
         idProofType,
+        idProofNumber,
         isOPD,
         hasInsurance,
         insuranceType,
+        clearInsuranceType,
         insuranceSchema,
         insuranceNumber,
         anyInfection,
         anyAllergy,
         allergyName,
         allergyDetail,
-        selectedDisease,
         isConfirmed,
       ];
+}
+
+class SubmitBasicDetailsEvent extends PatientRegistrationEvent {
+  const SubmitBasicDetailsEvent();
+}
+
+class SubmitFullRegistrationEvent extends PatientRegistrationEvent {
+  const SubmitFullRegistrationEvent();
 }

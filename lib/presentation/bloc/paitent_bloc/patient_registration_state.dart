@@ -1,42 +1,24 @@
 part of 'patient_registration_bloc.dart';
 
+const _kUnset = Object();
+
+enum PatientRegistrationStatus {
+  initial,
+  loading,
+  step1Success,
+  success,
+  failure,
+}
+
 class PatientRegistrationState extends Equatable {
-  final int currentStep;
-  final bool isOPD;
-  
-  // Step 1: Basic Details
-  final String firstName;
-  final String lastName;
-  final String gender;
-  final String dob;
-  final String age;
-  final String mobile;
-  final String email;
-  final String address;
-  final String city;
-  final String state;
-  final String pincode;
-  final String idProofType;
-
-  // Step 2: Insurance
-  final bool hasInsurance;
-  final String? insuranceType;
-  final String insuranceSchema;
-  final String insuranceNumber;
-  final bool anyInfection;
-  final bool anyAllergy;
-  final String allergyName;
-  final String allergyDetail;
-
-  // Step 3: Disease
-  final String? selectedDisease;
-
-  // Step 4: Review
-  final bool isConfirmed;
-
   const PatientRegistrationState({
+    this.status = PatientRegistrationStatus.initial,
+    this.error,
+    this.successMessage,
+    this.registeredId = '',
     this.currentStep = 0,
     this.isOPD = true,
+    // Step 1 — Basic Details
     this.firstName = '',
     this.lastName = '',
     this.gender = '',
@@ -49,6 +31,8 @@ class PatientRegistrationState extends Equatable {
     this.state = '',
     this.pincode = '',
     this.idProofType = '',
+    this.idProofNumber = '',
+    // Step 2 — Insurance & Medical
     this.hasInsurance = false,
     this.insuranceType,
     this.insuranceSchema = '',
@@ -57,11 +41,51 @@ class PatientRegistrationState extends Equatable {
     this.anyAllergy = false,
     this.allergyName = '',
     this.allergyDetail = '',
-    this.selectedDisease,
+    // Step 3 — Review
     this.isConfirmed = false,
   });
 
+  final PatientRegistrationStatus status;
+  final ApiError? error;
+  final String? successMessage;
+  final String registeredId;
+  final int currentStep;
+  final bool isOPD;
+
+  // Step 1
+  final String firstName;
+  final String lastName;
+  final String gender;
+  final String dob;
+  final String age;
+  final String mobile;
+  final String email;
+  final String address;
+  final String city;
+  final String state;
+  final String pincode;
+  final String idProofType;
+  final String idProofNumber;
+
+  // Step 2
+  final bool hasInsurance;
+  final String? insuranceType; // nullable — user may not select
+  final String insuranceSchema;
+  final String insuranceNumber;
+  final bool anyInfection;
+  final bool anyAllergy;
+  final String allergyName;
+  final String allergyDetail;
+
+  // Step 3
+  final bool isConfirmed;
+
+  // FIX BUG 19: insuranceType uses sentinel so it can be cleared to null.
   PatientRegistrationState copyWith({
+    PatientRegistrationStatus? status,
+    ApiError? error,
+    String? successMessage,
+    String? registeredId,
     int? currentStep,
     bool? isOPD,
     String? firstName,
@@ -76,18 +100,22 @@ class PatientRegistrationState extends Equatable {
     String? state,
     String? pincode,
     String? idProofType,
+    String? idProofNumber,
     bool? hasInsurance,
-    String? insuranceType,
+    Object? insuranceType = _kUnset, // sentinel default
     String? insuranceSchema,
     String? insuranceNumber,
     bool? anyInfection,
     bool? anyAllergy,
     String? allergyName,
     String? allergyDetail,
-    String? selectedDisease,
     bool? isConfirmed,
   }) {
     return PatientRegistrationState(
+      status: status ?? this.status,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+      registeredId: registeredId ?? this.registeredId,
       currentStep: currentStep ?? this.currentStep,
       isOPD: isOPD ?? this.isOPD,
       firstName: firstName ?? this.firstName,
@@ -102,44 +130,51 @@ class PatientRegistrationState extends Equatable {
       state: state ?? this.state,
       pincode: pincode ?? this.pincode,
       idProofType: idProofType ?? this.idProofType,
+      idProofNumber: idProofNumber ?? this.idProofNumber,
       hasInsurance: hasInsurance ?? this.hasInsurance,
-      insuranceType: insuranceType ?? this.insuranceType,
+      // Sentinel: _kUnset means "don't change"; null means "clear to null"
+      insuranceType: identical(insuranceType, _kUnset)
+          ? this.insuranceType
+          : insuranceType as String?,
       insuranceSchema: insuranceSchema ?? this.insuranceSchema,
       insuranceNumber: insuranceNumber ?? this.insuranceNumber,
       anyInfection: anyInfection ?? this.anyInfection,
       anyAllergy: anyAllergy ?? this.anyAllergy,
       allergyName: allergyName ?? this.allergyName,
       allergyDetail: allergyDetail ?? this.allergyDetail,
-      selectedDisease: selectedDisease ?? this.selectedDisease,
       isConfirmed: isConfirmed ?? this.isConfirmed,
     );
   }
 
   @override
   List<Object?> get props => [
-        currentStep,
-        isOPD,
-        firstName,
-        lastName,
-        gender,
-        dob,
-        age,
-        mobile,
-        email,
-        address,
-        city,
-        state,
-        pincode,
-        idProofType,
-        hasInsurance,
-        insuranceType,
-        insuranceSchema,
-        insuranceNumber,
-        anyInfection,
-        anyAllergy,
-        allergyName,
-        allergyDetail,
-        selectedDisease,
-        isConfirmed,
-      ];
+    status,
+    error,
+    successMessage,
+    registeredId,
+    currentStep,
+    isOPD,
+    firstName,
+    lastName,
+    gender,
+    dob,
+    age,
+    mobile,
+    email,
+    address,
+    city,
+    state,
+    pincode,
+    idProofType,
+    idProofNumber,
+    hasInsurance,
+    insuranceType,
+    insuranceSchema,
+    insuranceNumber,
+    anyInfection,
+    anyAllergy,
+    allergyName,
+    allergyDetail,
+    isConfirmed,
+  ];
 }

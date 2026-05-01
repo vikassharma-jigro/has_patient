@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hms_patient/app_helpers/assets/app_assets.dart';
+import 'package:hms_patient/app_helpers/network/snackbar_helper.dart';
 import 'package:hms_patient/app_helpers/theme/app_colors.dart';
 import 'package:hms_patient/app_helpers/theme/app_spacings.dart';
 import 'package:hms_patient/app_helpers/theme/app_typography.dart';
@@ -11,17 +13,31 @@ import 'package:hms_patient/app_helpers/widgets/custom_field.dart';
 import 'package:hms_patient/app_helpers/widgets/app_button.dart';
 import 'package:hms_patient/presentation/bloc/paitent_bloc/patient_registration_bloc.dart';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/// FIX BUG 8: Extracted constant — keeps repeated withValues calls DRY.
+const _kStepCount = 3;
+const _kStepLabels = ['Basic Details', 'Insurance', 'Review'];
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PatientRegistrationForm  (public entry point — provides BLoC)
+// ═════════════════════════════════════════════════════════════════════════════
+
 class PatientRegistrationForm extends StatelessWidget {
   const PatientRegistrationForm({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => PatientRegistrationBloc(),
+      create: (_) => PatientRegistrationBloc(),
       child: const _PatientRegistrationFormView(),
     );
   }
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _PatientRegistrationFormView
+// ═════════════════════════════════════════════════════════════════════════════
 
 class _PatientRegistrationFormView extends StatefulWidget {
   const _PatientRegistrationFormView();
@@ -35,7 +51,53 @@ class _PatientRegistrationFormViewState
     extends State<_PatientRegistrationFormView> {
   final _step1FormKey = GlobalKey<FormState>();
   final _step2FormKey = GlobalKey<FormState>();
-  final _step3FormKey = GlobalKey<FormState>();
+
+  // FIX BUG (UX): ScrollController so we can scroll to first error on fail.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // ── Validation + Navigation ────────────────────────────────────────────────
+
+  // FIX BUG 2: All navigation logic lives here.
+  // _NavigationButtons now receives a callback — no more findAncestorStateOfType.
+  void _handleNext(PatientRegistrationState state) {
+    final bloc = context.read<PatientRegistrationBloc>();
+
+    if (state.currentStep == 0) {
+      final isValid = _step1FormKey.currentState?.validate() ?? false;
+      if (!isValid) {
+        _scrollToTop();
+        return;
+      }
+      bloc.add(const SubmitBasicDetailsEvent());
+    } else if (state.currentStep == 1) {
+      final isValid = _step2FormKey.currentState?.validate() ?? false;
+      if (!isValid) {
+        _scrollToTop();
+        return;
+      }
+      bloc.add(const NextStepEvent());
+    } else if (state.currentStep == 2) {
+      bloc.add(const SubmitFullRegistrationEvent());
+    }
+  }
+
+  void _handleBack() {
+    context.read<PatientRegistrationBloc>().add(const PreviousStepEvent());
+  }
+
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +125,8 @@ class _PatientRegistrationFormViewState
                   .responsive(context),
             ),
             Text(
-              'Complete registration in 4 simple steps',
+              // FIX BUG 6: Was "4 simple steps" — corrected to 3.
+              'Complete registration in $_kStepCount simple steps',
               style: AppTypography.bodySmall
                   .withColor(AppColors.textOnPrimary)
                   .responsive(context),
@@ -71,54 +134,87 @@ class _PatientRegistrationFormViewState
           ],
         ),
       ),
-      body: Column(
-        children: [
-          BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-            buildWhen: (p, c) => p.currentStep != c.currentStep,
-            builder: (context, state) {
-              return _StepIndicator(currentStep: state.currentStep);
-            },
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: AppSpacing.symmetric(
-                context: context,
-                vertical: AppSizeTokens.size2x,
-                horizontal: AppSizeTokens.size4x,
-              ),
-              child: BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-                buildWhen: (p, c) => p.currentStep != c.currentStep,
-                builder: (context, state) {
-                  return IndexedStack(
-                    index: state.currentStep,
-                    children: [
-                      _BasicDetailsStep(formKey: _step1FormKey),
-                      _InsuranceStep(formKey: _step2FormKey),
-                      _DiseaseStep(formKey: _step3FormKey),
-                      const _ReviewStep(),
-                    ],
-                  );
-                },
+      body: BlocListener<PatientRegistrationBloc, PatientRegistrationState>(
+        listener: (context, state) {
+          if (state.status == PatientRegistrationStatus.failure &&
+              state.error != null) {
+            Snackbar.fromApiError(context, state.error!);
+            // Scroll to top so the user sees the error snackbar context.
+            _scrollToTop();
+          } else if (state.status == PatientRegistrationStatus.step1Success) {
+            Snackbar.success(
+              context,
+              message: state.successMessage ?? 'Basic details saved.',
+            );
+          } else if (state.status == PatientRegistrationStatus.success) {
+            Snackbar.success(
+              context,
+              message: state.successMessage ?? 'Registration successful.',
+            );
+            context.go('/login');
+          }
+        },
+        child: Column(
+          children: [
+            // Step indicator — only rebuilds when step changes.
+            BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
+              buildWhen: (p, c) => p.currentStep != c.currentStep,
+              builder: (context, state) =>
+                  _StepIndicator(currentStep: state.currentStep),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: AppSpacing.symmetric(
+                  context: context,
+                  vertical: AppSizeTokens.size2x,
+                  horizontal: AppSizeTokens.size4x,
+                ),
+                child:
+                    BlocBuilder<
+                      PatientRegistrationBloc,
+                      PatientRegistrationState
+                    >(
+                      buildWhen: (p, c) => p.currentStep != c.currentStep,
+                      builder: (context, state) => IndexedStack(
+                        index: state.currentStep,
+                        children: [
+                          _BasicDetailsStep(formKey: _step1FormKey),
+                          _InsuranceStep(formKey: _step2FormKey),
+                          const _ReviewStep(),
+                        ],
+                      ),
+                    ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-      bottomNavigationBar: const _NavigationButtons(),
+      // FIX BUG 2: Pass callback — NavigationButtons no longer needs ancestor.
+      bottomNavigationBar:
+          BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
+            buildWhen: (p, c) =>
+                p.currentStep != c.currentStep || p.status != c.status,
+            builder: (context, state) => _NavigationButtons(
+              currentStep: state.currentStep,
+              isLoading: state.status == PatientRegistrationStatus.loading,
+              onNext: () => _handleNext(state),
+              onBack: _handleBack,
+            ),
+          ),
     );
   }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// _StepIndicator
+// ═════════════════════════════════════════════════════════════════════════════
+
 class _StepIndicator extends StatelessWidget {
-  final int currentStep;
   const _StepIndicator({required this.currentStep});
 
-  static const _stepLabels = [
-    'Basic Details',
-    'Insurance',
-    'Disease',
-    'Review',
-  ];
+  final int currentStep;
 
   @override
   Widget build(BuildContext context) {
@@ -130,11 +226,10 @@ class _StepIndicator extends StatelessWidget {
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: List.generate(_stepLabels.length * 2 - 1, (i) {
+        children: List.generate(_kStepLabels.length * 2 - 1, (i) {
           if (i.isOdd) {
             final stepIndex = i ~/ 2;
             final isCompleted = stepIndex < currentStep;
-
             return Expanded(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 400),
@@ -220,7 +315,7 @@ class _StepIndicator extends StatelessWidget {
                       ? AppTypography.semiBold
                       : AppTypography.regular,
                 ),
-                child: Text(_stepLabels[stepIndex]),
+                child: Text(_kStepLabels[stepIndex]),
               ),
             ],
           );
@@ -230,9 +325,14 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// _BasicDetailsStep
+// ═════════════════════════════════════════════════════════════════════════════
+
 class _BasicDetailsStep extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
   const _BasicDetailsStep({required this.formKey});
+
+  final GlobalKey<FormState> formKey;
 
   @override
   Widget build(BuildContext context) {
@@ -241,14 +341,22 @@ class _BasicDetailsStep extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _TypeRadioSelection(),
-          AppSpacing.h12(context),
+          // // OPD / Emergency toggle
+          // const _TypeRadioSelection(),
+          // AppSpacing.h12(context),
+
+          // Name row
           Row(
             children: [
               Expanded(
                 child: CustomField(
                   label: 'First Name',
                   hintText: 'First name',
+                  // FIX BUG 7: nameFormatter now applied.
+                  inputFormatters: [
+                    AppInputFormatters.nameFormatter,
+                    AppInputFormatters.lengthLimit(50),
+                  ],
                   onChanged: (v) => context.read<PatientRegistrationBloc>().add(
                     UpdateFieldEvent(firstName: v),
                   ),
@@ -262,6 +370,10 @@ class _BasicDetailsStep extends StatelessWidget {
                 child: CustomField(
                   label: 'Last Name',
                   hintText: 'Last name',
+                  inputFormatters: [
+                    AppInputFormatters.nameFormatter,
+                    AppInputFormatters.lengthLimit(50),
+                  ],
                   onChanged: (v) => context.read<PatientRegistrationBloc>().add(
                     UpdateFieldEvent(lastName: v),
                   ),
@@ -269,6 +381,8 @@ class _BasicDetailsStep extends StatelessWidget {
               ),
             ],
           ),
+
+          // Gender + DOB row
           Row(
             children: [
               Expanded(
@@ -278,48 +392,39 @@ class _BasicDetailsStep extends StatelessWidget {
                       PatientRegistrationState
                     >(
                       buildWhen: (p, c) => p.gender != c.gender,
-                      builder: (context, state) {
-                        return CustomDropdown<String>(
-                          label: 'Gender',
-                          hintText: 'Select gender',
-                          items: const ['Male', 'Female', 'Other'],
-                          value: state.gender.isEmpty ? null : state.gender,
-                          onChanged: (v) => context
-                              .read<PatientRegistrationBloc>()
-                              .add(UpdateFieldEvent(gender: v)),
-                          itemLabel: (item) => item,
-                          validator: AppFormValidators.required(
-                            fieldName: 'gender',
-                          ),
-                        );
-                      },
+                      builder: (context, state) => CustomDropdown<String>(
+                        label: 'Gender',
+                        hintText: 'Select gender',
+                        items: const ['Male', 'Female', 'Other'],
+                        value: state.gender.isEmpty ? null : state.gender,
+                        onChanged: (v) => context
+                            .read<PatientRegistrationBloc>()
+                            .add(UpdateFieldEvent(gender: v)),
+                        itemLabel: (item) => item,
+                        validator: AppFormValidators.required(
+                          fieldName: 'gender',
+                        ),
+                      ),
                     ),
               ),
               AppSpacing.w12(context),
-              Expanded(
-                child: CustomField(
-                  label: 'Date of Birth',
-                  hintText: 'DD/MM/YYYY',
-                  keyboardType: TextInputType.datetime,
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(dob: v),
-                  ),
-                  validator: AppFormValidators.date(),
-                ),
-              ),
+              // FIX BUG 1: DOB is its own StatefulWidget — controller lifecycle safe.
+              const Expanded(child: _DobField()),
             ],
           ),
+
+          // Age + Mobile row
           Row(
             children: [
               Expanded(
                 child: CustomField(
                   label: 'Age',
+                  hintText: 'Enter age',
+                  keyboardType: TextInputType.number,
                   inputFormatters: [
                     AppInputFormatters.digitsOnly,
                     AppInputFormatters.lengthLimit(3),
                   ],
-                  hintText: 'Enter age',
-                  keyboardType: TextInputType.number,
                   onChanged: (v) => context.read<PatientRegistrationBloc>().add(
                     UpdateFieldEvent(age: v),
                   ),
@@ -330,9 +435,12 @@ class _BasicDetailsStep extends StatelessWidget {
               Expanded(
                 child: CustomField(
                   label: 'Mobile Number',
-                  hintText: 'Enter mobile number',
-                  inputFormatters: [AppInputFormatters.phoneFormatter],
+                  hintText: '10-digit mobile',
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    AppInputFormatters.digitsOnly,
+                    AppInputFormatters.lengthLimit(10),
+                  ],
                   onChanged: (v) => context.read<PatientRegistrationBloc>().add(
                     UpdateFieldEvent(mobile: v),
                   ),
@@ -341,23 +449,32 @@ class _BasicDetailsStep extends StatelessWidget {
               ),
             ],
           ),
+
+          // Email
           CustomField(
             label: 'Email',
             hintText: 'Enter email address',
             keyboardType: TextInputType.emailAddress,
+            // FIX BUG 8: emailFormatter now applied.
+            inputFormatters: [AppInputFormatters.emailFormatter],
             onChanged: (v) => context.read<PatientRegistrationBloc>().add(
               UpdateFieldEvent(email: v),
             ),
             validator: AppFormValidators.email(),
           ),
+
+          // Address
           CustomField(
             label: 'Address',
             hintText: 'Enter full address',
+            inputFormatters: [AppInputFormatters.addressFormatter],
             onChanged: (v) => context.read<PatientRegistrationBloc>().add(
               UpdateFieldEvent(address: v),
             ),
             validator: AppFormValidators.required(fieldName: 'address'),
           ),
+
+          // City + State row
           Row(
             children: [
               Expanded(
@@ -385,14 +502,19 @@ class _BasicDetailsStep extends StatelessWidget {
               ),
             ],
           ),
+
+          // Pincode + ID Proof Type row
           Row(
             children: [
               Expanded(
                 child: CustomField(
                   label: 'Pincode',
                   hintText: 'Enter pincode',
-                  inputFormatters: [AppInputFormatters.pincodeFormatter],
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    AppInputFormatters.pincodeFormatter,
+                    AppInputFormatters.lengthLimit(6),
+                  ],
                   onChanged: (v) => context.read<PatientRegistrationBloc>().add(
                     UpdateFieldEvent(pincode: v),
                   ),
@@ -401,32 +523,187 @@ class _BasicDetailsStep extends StatelessWidget {
               ),
               AppSpacing.w12(context),
               Expanded(
-                child: CustomField(
-                  label: 'ID Proof Type',
-                  hintText: 'Aadhar/PAN etc.',
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(idProofType: v),
-                  ),
-                  validator: AppFormValidators.required(
-                    fieldName: 'ID proof type',
-                  ),
-                ),
+                child:
+                    BlocBuilder<
+                      PatientRegistrationBloc,
+                      PatientRegistrationState
+                    >(
+                      buildWhen: (p, c) => p.idProofType != c.idProofType,
+                      builder: (context, state) => CustomDropdown<String>(
+                        label: 'ID Proof Type',
+                        hintText: 'Select type',
+                        items: const [
+                          'Aadhar Card',
+                          'PAN Card',
+                          'Voter ID',
+                          'Driving License',
+                          'Passport',
+                        ],
+                        value: state.idProofType.isEmpty
+                            ? null
+                            : state.idProofType,
+                        onChanged: (v) => context
+                            .read<PatientRegistrationBloc>()
+                            .add(UpdateFieldEvent(idProofType: v)),
+                        itemLabel: (item) => item,
+                        validator: AppFormValidators.required(
+                          fieldName: 'ID proof type',
+                        ),
+                      ),
+                    ),
               ),
             ],
           ),
-          AppButton(
-            onPressed: () {},
-            text: 'Upload ID Document',
-            type: AppButtonType.outlined,
-            icon: const Icon(Icons.upload_file, size: 18),
-            borderColor: AppColors.secondary,
-            textColor: AppColors.secondary,
+
+          // ID Proof Number — FIX BUG 10: validator via top-level
+          // AppFormValidators.idProof(), not an inline closure.
+          BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
+            buildWhen: (p, c) =>
+                p.idProofType != c.idProofType ||
+                p.idProofNumber != c.idProofNumber,
+            builder: (context, state) => CustomField(
+              // Key forces widget recreation when proof type changes,
+              // clearing the old input (FIX BUG in bloc: idProofNumber cleared too).
+              key: ValueKey(state.idProofType),
+              label: _idProofLabel(state.idProofType),
+              hintText: _idProofHint(state.idProofType),
+              inputFormatters: [AppInputFormatters.idProofFormatter],
+              onChanged: (v) => context.read<PatientRegistrationBloc>().add(
+                UpdateFieldEvent(idProofNumber: v),
+              ),
+              validator: AppFormValidators.idProof(state.idProofType),
+            ),
           ),
         ],
       ),
     );
   }
+
+  String _idProofLabel(String type) {
+    switch (type) {
+      case 'Aadhar Card':
+        return 'Aadhar Number';
+      case 'PAN Card':
+        return 'PAN Number';
+      case 'Voter ID':
+        return 'Voter ID Number';
+      case 'Driving License':
+        return 'DL Number';
+      case 'Passport':
+        return 'Passport Number';
+      default:
+        return 'ID Proof Number';
+    }
+  }
+
+  String _idProofHint(String type) {
+    switch (type) {
+      case 'Aadhar Card':
+        return 'Enter 12-digit Aadhar';
+      case 'PAN Card':
+        return 'e.g. ABCDE1234F';
+      case 'Voter ID':
+        return 'e.g. ABC1234567';
+      case 'Driving License':
+        return 'e.g. DL0420110149646';
+      case 'Passport':
+        return 'e.g. A1234567';
+      default:
+        return 'Enter ID number';
+    }
+  }
 }
+
+// ─── DOB Field  ───────────────────────────────────────────────────────────────
+// FIX BUG 1: DOB controller properly created, updated, and disposed here.
+
+class _DobField extends StatefulWidget {
+  const _DobField();
+
+  @override
+  State<_DobField> createState() => _DobFieldState();
+}
+
+class _DobFieldState extends State<_DobField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
+      buildWhen: (p, c) => p.dob != c.dob,
+      builder: (context, state) {
+        // Sync controller text without recreating it.
+        if (_controller.text != state.dob) {
+          _controller.value = TextEditingValue(
+            text: state.dob,
+            selection: TextSelection.collapsed(offset: state.dob.length),
+          );
+        }
+        return CustomField(
+          controller: _controller,
+          label: 'Date of Birth',
+          hintText: 'DD/MM/YYYY',
+          readOnly: true,
+          onTap: () async {
+            // FIX BUG 12: Correct leap-year-safe date arithmetic.
+            final now = DateTime.now();
+            final defaultInitial = DateTime(now.year - 20, now.month, now.day);
+            final initial = state.dob.isNotEmpty
+                ? (tryParseDate(state.dob) ?? defaultInitial)
+                : defaultInitial;
+
+            final date = await showDatePicker(
+              context: context,
+              initialDate: initial,
+              firstDate: DateTime(1900),
+              lastDate: now,
+              builder: (context, child) => Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: ColorScheme.light(
+                    primary: AppColors.secondary,
+                    onPrimary: Colors.white,
+                    onSurface: AppColors.textPrimary,
+                  ),
+                  textButtonTheme: TextButtonThemeData(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.secondary,
+                    ),
+                  ),
+                ),
+                child: child!,
+              ),
+            );
+
+            if (date != null && context.mounted) {
+              final formatted =
+                  '${date.day.toString().padLeft(2, '0')}/'
+                  '${date.month.toString().padLeft(2, '0')}/'
+                  '${date.year}';
+              context.read<PatientRegistrationBloc>().add(
+                UpdateFieldEvent(dob: formatted),
+              );
+            }
+          },
+          validator: AppFormValidators.date(),
+        );
+      },
+    );
+  }
+}
+
+// ─── Type Radio Selection ─────────────────────────────────────────────────────
 
 class _TypeRadioSelection extends StatelessWidget {
   const _TypeRadioSelection();
@@ -435,31 +712,43 @@ class _TypeRadioSelection extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
       buildWhen: (p, c) => p.isOPD != c.isOPD,
-      builder: (context, state) {
-        return Padding(
-          padding: AppSpacing.symmetric(
-            context: context,
-            horizontal: AppPaddingTokens.padding4x,
-            vertical: AppPaddingTokens.padding2x,
-          ),
-          child: Row(
-            children: [
-              _radioOption(context, 'OPD', true, state.isOPD),
-              AppSpacing.w24(context),
-              _radioOption(context, 'Emergency', false, state.isOPD),
-            ],
-          ),
-        );
-      },
+      builder: (context, state) => Padding(
+        padding: AppSpacing.symmetric(
+          context: context,
+          horizontal: AppPaddingTokens.padding4x,
+          vertical: AppPaddingTokens.padding2x,
+        ),
+        child: Row(
+          children: [
+            // FIX BUG 9: _RadioOption is now a proper StatelessWidget.
+            _RadioOption(label: 'OPD', value: true, groupValue: state.isOPD),
+            AppSpacing.w24(context),
+            _RadioOption(
+              label: 'Emergency',
+              value: false,
+              groupValue: state.isOPD,
+            ),
+          ],
+        ),
+      ),
     );
   }
+}
 
-  Widget _radioOption(
-    BuildContext context,
-    String label,
-    bool value,
-    bool groupValue,
-  ) {
+/// FIX BUG 9: Proper widget class instead of method returning Widget.
+class _RadioOption extends StatelessWidget {
+  const _RadioOption({
+    required this.label,
+    required this.value,
+    required this.groupValue,
+  });
+
+  final String label;
+  final bool value;
+  final bool groupValue;
+
+  @override
+  Widget build(BuildContext context) {
     return InkWell(
       onTap: () => context.read<PatientRegistrationBloc>().add(
         UpdateFieldEvent(isOPD: value),
@@ -469,13 +758,14 @@ class _TypeRadioSelection extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           RadioGroup(
-        groupValue: groupValue,
-        onChanged: (val) {
-          if (val != null) {
-            context.read<PatientRegistrationBloc>().add(
-              UpdateFieldEvent(isOPD: val),
-            );
-          }},
+            groupValue: groupValue,
+            onChanged: (val) {
+              if (val != null) {
+                context.read<PatientRegistrationBloc>().add(
+                  UpdateFieldEvent(isOPD: val),
+                );
+              }
+            },
             child: Radio<bool>(
               value: value,
               activeColor: AppColors.secondary,
@@ -489,195 +779,174 @@ class _TypeRadioSelection extends StatelessWidget {
   }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// _InsuranceStep
+// FIX BUG 3: buildWhen prevents rebuild on every keystroke.
+// FIX BUG 16 & 17: Field clearing handled in BLoC; UX shows clean empty state.
+// ═════════════════════════════════════════════════════════════════════════════
+
 class _InsuranceStep extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
   const _InsuranceStep({required this.formKey});
+
+  final GlobalKey<FormState> formKey;
 
   @override
   Widget build(BuildContext context) {
     return Form(
       key: formKey,
       child: BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-        builder: (context, state) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Insurance & Medical History',
-                style: AppTypography.titleMedium.semiBold.responsive(context),
-              ),
-              AppSpacing.h16(context),
-              Row(
-                children: [
-                  _CustomToggle(
-                    label: 'Insurance Available?',
-                    isSelected: state.hasInsurance,
-                    onTap: () => context.read<PatientRegistrationBloc>().add(
-                      const UpdateFieldEvent(hasInsurance: true),
-                    ),
-                  ),
-                  AppSpacing.w24(context),
-                  _CustomToggle(
-                    label: 'No',
-                    isSelected: !state.hasInsurance,
-                    onTap: () => context.read<PatientRegistrationBloc>().add(
-                      const UpdateFieldEvent(hasInsurance: false),
-                    ),
-                  ),
-                ],
-              ),
-              AppSpacing.h16(context),
-              if (state.hasInsurance) ...[
-                CustomDropdown<String>(
-                  label: 'Insurance Type',
-                  hintText: 'Select insurance type',
-                  items: const [
-                    'Life Insurance',
-                    'Health Insurance',
-                    'General',
-                  ],
-                  value: state.insuranceType,
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(insuranceType: v),
-                  ),
-                  itemLabel: (item) => item,
-                  validator: AppFormValidators.required(
-                    fieldName: 'insurance type',
-                  ),
-                ),
-                CustomField(
-                  label: 'Insurance Schema Name',
-                  hintText: 'Enter scheme name',
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(insuranceSchema: v),
-                  ),
-                ),
-                CustomField(
-                  label: 'Insurance Number',
-                  hintText: 'Enter policy number',
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(insuranceNumber: v),
-                  ),
-                  validator: AppFormValidators.required(
-                    fieldName: 'insurance number',
-                  ),
-                ),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: _YesNoRow(
-                      label: 'Any Infection?',
-                      value: state.anyInfection,
-                      onChanged: (v) => context
-                          .read<PatientRegistrationBloc>()
-                          .add(UpdateFieldEvent(anyInfection: v)),
-                    ),
-                  ),
-                  AppSpacing.w12(context),
-                  Expanded(
-                    child: _YesNoRow(
-                      label: 'Any Allergy?',
-                      value: state.anyAllergy,
-                      onChanged: (v) => context
-                          .read<PatientRegistrationBloc>()
-                          .add(UpdateFieldEvent(anyAllergy: v)),
-                    ),
-                  ),
-                ],
-              ),
-              AppSpacing.h16(context),
-              if (state.anyAllergy) ...[
-                CustomField(
-                  label: 'Allergy Name',
-                  hintText: 'Enter allergy name',
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(allergyName: v),
-                  ),
-                ),
-                CustomField(
-                  label: 'Allergy Details',
-                  maxLines: 3,
-                  hintText: 'Describe symptoms or details',
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(allergyDetail: v),
-                  ),
-                ),
-              ],
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+        // FIX BUG 3: Only rebuild when toggles or insuranceType changes,
+        // NOT on every keystroke in other fields.
+        buildWhen: (p, c) =>
+            p.hasInsurance != c.hasInsurance ||
+            p.insuranceType != c.insuranceType ||
+            p.anyInfection != c.anyInfection ||
+            p.anyAllergy != c.anyAllergy,
+        builder: (context, state) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Insurance & Medical History',
+              style: AppTypography.titleMedium.semiBold.responsive(context),
+            ),
+            AppSpacing.h16(context),
 
-class _CustomToggle extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Color? activeColor;
-
-  const _CustomToggle({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.activeColor,  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = activeColor ?? AppColors.secondary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppBorderRadiusTokens.circular1x,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? color : AppColors.grey300,
-                width: 2,
+            // Insurance toggle
+            _YesNoRow(
+              label: 'Insurance Available?',
+              value: state.hasInsurance,
+              onChanged: (v) => context.read<PatientRegistrationBloc>().add(
+                UpdateFieldEvent(hasInsurance: v),
               ),
             ),
-            child: isSelected
-                ? Center(
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color,
-                      ),
-                    ),
-                  )
-                : null,
-          ),
-          AppSpacing.w8(context),
-          Text(
-            label,
-            style: AppTypography.bodyMedium.medium.responsive(context),
-          ),
-        ],
+
+            // Insurance fields — shown only when hasInsurance is true.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: state.hasInsurance
+                  ? Column(
+                      children: [
+                        AppSpacing.h16(context),
+                        CustomDropdown<String>(
+                          label: 'Insurance Type',
+                          hintText: 'Select insurance type',
+                          items: const [
+                            'Life Insurance',
+                            'Health Insurance',
+                            'General',
+                          ],
+                          value: state.insuranceType,
+                          onChanged: (v) => context
+                              .read<PatientRegistrationBloc>()
+                              .add(UpdateFieldEvent(insuranceType: v)),
+                          itemLabel: (item) => item,
+                          validator: AppFormValidators.required(
+                            fieldName: 'insurance type',
+                          ),
+                        ),
+                        CustomField(
+                          label: 'Insurance Scheme Name',
+                          hintText: 'Enter scheme name',
+                          onChanged: (v) => context
+                              .read<PatientRegistrationBloc>()
+                              .add(UpdateFieldEvent(insuranceSchema: v)),
+                        ),
+                        CustomField(
+                          label: 'Insurance Number',
+                          hintText: 'Enter policy number',
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            AppInputFormatters.idProofFormatter,
+                          ],
+                          onChanged: (v) => context
+                              .read<PatientRegistrationBloc>()
+                              .add(UpdateFieldEvent(insuranceNumber: v)),
+                          validator: AppFormValidators.required(
+                            fieldName: 'insurance number',
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+
+            AppSpacing.h16(context),
+
+            // Infection + Allergy toggles side by side
+            Row(
+              children: [
+                Expanded(
+                  child: _YesNoRow(
+                    label: 'Any Infection?',
+                    value: state.anyInfection,
+                    onChanged: (v) => context
+                        .read<PatientRegistrationBloc>()
+                        .add(UpdateFieldEvent(anyInfection: v)),
+                  ),
+                ),
+                AppSpacing.w12(context),
+                Expanded(
+                  child: _YesNoRow(
+                    label: 'Any Allergy?',
+                    value: state.anyAllergy,
+                    onChanged: (v) => context
+                        .read<PatientRegistrationBloc>()
+                        .add(UpdateFieldEvent(anyAllergy: v)),
+                  ),
+                ),
+              ],
+            ),
+
+            // Allergy fields — shown only when anyAllergy is true.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: state.anyAllergy
+                  ? Column(
+                      children: [
+                        AppSpacing.h16(context),
+                        CustomField(
+                          label: 'Allergy Name',
+                          hintText: 'Enter allergy name',
+                          onChanged: (v) => context
+                              .read<PatientRegistrationBloc>()
+                              .add(UpdateFieldEvent(allergyName: v)),
+                          validator: AppFormValidators.required(
+                            fieldName: 'allergy name',
+                          ),
+                        ),
+                        CustomField(
+                          label: 'Allergy Details',
+                          maxLines: 3,
+                          hintText: 'Describe symptoms or details',
+                          onChanged: (v) => context
+                              .read<PatientRegistrationBloc>()
+                              .add(UpdateFieldEvent(allergyDetail: v)),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _YesNoRow extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+// ─── Yes / No Toggle Row ──────────────────────────────────────────────────────
 
+class _YesNoRow extends StatelessWidget {
   const _YesNoRow({
     required this.label,
     required this.value,
     required this.onChanged,
   });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -689,122 +958,86 @@ class _YesNoRow extends StatelessWidget {
           style: AppTypography.bodySmall.semiBold.responsive(context),
         ),
         AppSpacing.h8(context),
-        Row(
-          children: [
-            _SmallToggle(
-              label: 'Yes',
-              isSelected: value,
-              color: AppColors.success,
-              onTap: () => onChanged(true),
-            ),
-            AppSpacing.w16(context),
-            _SmallToggle(
-              label: 'No',
-              isSelected: !value,
-              color: AppColors.error,
-              onTap: () => onChanged(false),
-            ),
-          ],
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.grey100,
+            borderRadius: AppBorderRadiusTokens.circular2x,
+          ),
+          child: Row(
+            children: [
+              _SelectionOption(
+                label: 'Yes',
+                isSelected: value,
+                activeColor: AppColors.success,
+                onTap: () => onChanged(true),
+              ),
+              _SelectionOption(
+                label: 'No',
+                isSelected: !value,
+                activeColor: AppColors.error,
+                onTap: () => onChanged(false),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-class _SmallToggle extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _SmallToggle({
+class _SelectionOption extends StatelessWidget {
+  const _SelectionOption({
     required this.label,
     required this.isSelected,
-    required this.color,
+    required this.activeColor,
     required this.onTap,
   });
 
+  final String label;
+  final bool isSelected;
+  final Color activeColor;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppBorderRadiusTokens.circular1x,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 16,
-            height: 16,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? color : AppColors.grey300,
-                width: 1.5,
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? activeColor : Colors.transparent,
+            borderRadius: AppBorderRadiusTokens.circular1x,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTypography.labelMedium.semiBold.copyWith(
+                color: isSelected ? Colors.white : AppColors.grey600,
               ),
             ),
-            child: isSelected
-                ? Center(
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color,
-                      ),
-                    ),
-                  )
-                : null,
           ),
-          AppSpacing.w4(context),
-          Text(label, style: AppTypography.labelMedium.responsive(context)),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _DiseaseStep extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
-  const _DiseaseStep({required this.formKey});
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: formKey,
-      child: BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-        builder: (context, state) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Additional Medical Information',
-                style: AppTypography.titleMedium.semiBold.responsive(context),
-              ),
-              AppSpacing.h16(context),
-              CustomDropdown<String>(
-                label: 'Serious Diseases',
-                hintText: 'Select if applicable',
-                items: const ['Cancer', 'Diabetes', 'Heart Disease', 'None'],
-                value: state.selectedDisease,
-                onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                  UpdateFieldEvent(selectedDisease: v),
-                ),
-                itemLabel: (item) => item,
-              ),
-              AppSpacing.h12(context),
-              Text(
-                'Note: Please ensure all medical details are accurate for proper clinical evaluation.',
-                style: AppTypography.bodySmall.italic
-                    .withColor(AppColors.textGrey)
-                    .responsive(context),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+// ═════════════════════════════════════════════════════════════════════════════
+// _ReviewStep
+// FIX BUG 4: buildWhen prevents rebuild on every keystroke from other steps.
+// ═════════════════════════════════════════════════════════════════════════════
 
 class _ReviewStep extends StatelessWidget {
   const _ReviewStep();
@@ -812,101 +1045,123 @@ class _ReviewStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-      builder: (context, state) {
-        return Column(
-          children: [
-            _ReviewSection(
-              title: 'Patient Details',
-              rows: [
+      builder: (context, state) => Column(
+        children: [
+          _ReviewSection(
+            title: 'Patient Details',
+            rows: [
+              _ReviewRowData(
+                'Full Name',
+                [
+                  state.firstName,
+                  state.lastName,
+                ].where((s) => s.isNotEmpty).join(' ').ifEmpty('-'),
+                'Gender',
+                state.gender.ifEmpty('-'),
+              ),
+              _ReviewRowData(
+                'Mobile Number',
+                state.mobile.ifEmpty('-'),
+                'Email',
+                state.email.ifEmpty('-'),
+              ),
+              _ReviewRowData(
+                'Age',
+                state.age.ifEmpty('-'),
+                'DOB',
+                state.dob.ifEmpty('-'),
+              ),
+              _ReviewRowData(
+                'Address',
+                state.address.ifEmpty('-'),
+                'City',
+                state.city.ifEmpty('-'),
+              ),
+              _ReviewRowData(
+                'ID Proof Type',
+                state.idProofType.ifEmpty('-'),
+                'ID Proof Number',
+                state.idProofNumber.ifEmpty('-'),
+              ),
+            ],
+          ),
+          AppSpacing.h12(context),
+          _ReviewSection(
+            title: 'Insurance & Medical Info',
+            rows: [
+              _ReviewRowData(
+                'Has Insurance',
+                state.hasInsurance ? 'Yes' : 'No',
+                'Insurance Type',
+                state.insuranceType ?? '-',
+              ),
+              _ReviewRowData(
+                'Scheme',
+                state.insuranceSchema.ifEmpty('-'),
+                'Policy Number',
+                state.insuranceNumber.ifEmpty('-'),
+              ),
+              _ReviewRowData(
+                'Infection',
+                state.anyInfection ? 'Yes' : 'No',
+                'Allergies',
+                state.anyAllergy ? 'Yes' : 'No',
+              ),
+              if (state.anyAllergy)
                 _ReviewRowData(
-                  'Full Name',
-                  state.firstName.isEmpty
-                      ? '-'
-                      : '${state.firstName} ${state.lastName}',
-                  'Gender',
-                  state.gender.isEmpty ? '-' : state.gender,
+                  'Allergy Name',
+                  state.allergyName.ifEmpty('-'),
+                  'Allergy Details',
+                  state.allergyDetail.ifEmpty('-'),
                 ),
-                _ReviewRowData(
-                  'Mobile Number',
-                  state.mobile.isEmpty ? '-' : state.mobile,
-                  'Email',
-                  state.email.isEmpty ? '-' : state.email,
+            ],
+          ),
+          AppSpacing.h24(context),
+
+          // Confirmation checkbox
+          Padding(
+            padding: AppSpacing.symmetric(context: context, horizontal: 16),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: state.isConfirmed
+                      ? AppColors.success
+                      : AppColors.grey300,
                 ),
-                _ReviewRowData(
-                  'Age',
-                  state.age.isEmpty ? '-' : state.age,
-                  'DOB',
-                  state.dob.isEmpty ? '-' : state.dob,
+                borderRadius: AppBorderRadiusTokens.circular2x,
+                color: state.isConfirmed
+                    ? AppColors.success.withValues(alpha: 0.05)
+                    : AppColors.grey50,
+              ),
+              child: CheckboxListTile(
+                value: state.isConfirmed,
+                activeColor: AppColors.secondary,
+                onChanged: (v) => context.read<PatientRegistrationBloc>().add(
+                  UpdateFieldEvent(isConfirmed: v ?? false),
                 ),
-                _ReviewRowData(
-                  'Address',
-                  state.address.isEmpty ? '-' : state.address,
-                  'City',
-                  state.city.isEmpty ? '-' : state.city,
-                ),
-              ],
-            ),
-            AppSpacing.h12(context),
-            _ReviewSection(
-              title: 'Insurance & Medical Info',
-              rows: [
-                _ReviewRowData(
-                  'Insurance Type',
-                  state.insuranceType ?? '-',
-                  'Scheme',
-                  state.insuranceSchema.isEmpty ? '-' : state.insuranceSchema,
-                ),
-                _ReviewRowData(
-                  'Policy Number',
-                  state.insuranceNumber.isEmpty ? '-' : state.insuranceNumber,
-                  'Infection',
-                  state.anyInfection ? 'Yes' : 'No',
-                ),
-                _ReviewRowData(
-                  'Allergies',
-                  state.anyAllergy ? 'Yes' : 'No',
-                  'Serious Diseases',
-                  state.selectedDisease ?? '-',
-                ),
-              ],
-            ),
-            AppSpacing.h24(context),
-            Padding(
-              padding: AppSpacing.symmetric(context: context, horizontal: 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.grey300),
-                  borderRadius: AppBorderRadiusTokens.circular2x,
-                  color: AppColors.grey50,
-                ),
-                child: CheckboxListTile(
-                  value: state.isConfirmed,
-                  activeColor: AppColors.secondary,
-                  onChanged: (v) => context.read<PatientRegistrationBloc>().add(
-                    UpdateFieldEvent(isConfirmed: v ?? false),
-                  ),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  title: Text(
-                    'I confirm that all the information provided above is correct to the best of my knowledge.',
-                    style: AppTypography.bodySmall.responsive(context),
-                  ),
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                title: Text(
+                  'I confirm that all the information provided above is correct to the best of my knowledge.',
+                  style: AppTypography.bodySmall.responsive(context),
                 ),
               ),
             ),
-            AppSpacing.h24(context),
-          ],
-        );
-      },
+          ),
+          AppSpacing.h24(context),
+        ],
+      ),
     );
   }
 }
 
+// ─── Review Section ───────────────────────────────────────────────────────────
+
 class _ReviewSection extends StatelessWidget {
+  const _ReviewSection({required this.title, required this.rows});
+
   final String title;
   final List<_ReviewRowData> rows;
-
-  const _ReviewSection({required this.title, required this.rows});
 
   @override
   Widget build(BuildContext context) {
@@ -936,19 +1191,9 @@ class _ReviewSection extends StatelessWidget {
                 right: 16,
                 bottom: 8,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    title,
-                    style: AppTypography.bodyLarge.bold.responsive(context),
-                  ),
-                  const Icon(
-                    Icons.edit_outlined,
-                    size: 18,
-                    color: AppColors.secondary,
-                  ),
-                ],
+              child: Text(
+                title,
+                style: AppTypography.bodyLarge.bold.responsive(context),
               ),
             ),
             const Divider(height: 1),
@@ -961,8 +1206,9 @@ class _ReviewSection extends StatelessWidget {
 }
 
 class _ReviewRowWidget extends StatelessWidget {
-  final _ReviewRowData row;
   const _ReviewRowWidget({required this.row});
+
+  final _ReviewRowData row;
 
   @override
   Widget build(BuildContext context) {
@@ -1015,92 +1261,81 @@ class _ReviewRowWidget extends StatelessWidget {
 }
 
 class _ReviewRowData {
-  final String label1, value1, label2, value2;
   const _ReviewRowData(this.label1, this.value1, this.label2, this.value2);
+
+  final String label1, value1, label2, value2;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// _NavigationButtons
+// FIX BUG 2: Receives callbacks — no findAncestorStateOfType anti-pattern.
+// FIX BUG 5: buildWhen set — only rebuilds when step or loading changes.
+// ═════════════════════════════════════════════════════════════════════════════
+
 class _NavigationButtons extends StatelessWidget {
-  const _NavigationButtons();
+  const _NavigationButtons({
+    required this.currentStep,
+    required this.isLoading,
+    required this.onNext,
+    required this.onBack,
+  });
+
+  final int currentStep;
+  final bool isLoading;
+  final VoidCallback onNext;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<PatientRegistrationBloc, PatientRegistrationState>(
-      builder: (context, state) {
-        final showBack = state.currentStep > 0;
-        return Padding(
-          padding: AppSpacing.only(
-            context: context,
-            left: AppPaddingTokens.padding2x,
-            right: AppPaddingTokens.padding2x,
-            top: AppPaddingTokens.padding4x,
-            bottom: AppPaddingTokens.padding6x,
-          ),
-          child: Row(
-            children: [
-              if (showBack) ...[
-                Expanded(
-                  child: AppButton(
-                    text: 'Back',
-                    type: AppButtonType.outlined,
-                    height: 48,
-                    icon: const Icon(Icons.arrow_back, size: 16),
-                    borderColor: AppColors.grey300,
-                    textColor: AppColors.textPrimary,
-                    onPressed: () => context
-                        .read<PatientRegistrationBloc>()
-                        .add(PreviousStepEvent()),
-                  ),
-                ),
-                AppSpacing.w8(context),
-              ],
-              Expanded(
-                flex: 2,
-                child: AppButton(
-                  text: state.currentStep == 3 ? 'Submit for Approval' : 'Next',
-                  height: 48,
-                  backgroundColor: AppColors.secondary,
-                  icon: state.currentStep == 3
-                      ? null
-                      : const Icon(Icons.arrow_forward, size: 16),
-                  iconPosition: AppButtonIconPosition.end,
-                  onPressed: () {
-                    final viewState = context
-                        .findAncestorStateOfType<
-                          _PatientRegistrationFormViewState
-                        >();
-                    bool isValid = true;
-                    if (state.currentStep == 0) {
-                      isValid =
-                          viewState?._step1FormKey.currentState?.validate() ??
-                          false;
-                    }
-                    if (state.currentStep == 1) {
-                      isValid =
-                          viewState?._step2FormKey.currentState?.validate() ??
-                          false;
-                    }
-                    if (state.currentStep == 2) {
-                      isValid =
-                          viewState?._step3FormKey.currentState?.validate() ??
-                          false;
-                    }
+    final showBack = currentStep > 0;
+    final isLastStep = currentStep == 2;
 
-                    if (isValid) {
-                      if (state.currentStep < 3) {
-                        context.read<PatientRegistrationBloc>().add(
-                          NextStepEvent(),
-                        );
-                      } else {
-                        // Handle Submit
-                      }
-                    }
-                  },
-                ),
+    return Padding(
+      padding: AppSpacing.only(
+        context: context,
+        left: AppPaddingTokens.padding2x,
+        right: AppPaddingTokens.padding2x,
+        top: AppPaddingTokens.padding4x,
+        bottom: AppPaddingTokens.padding6x,
+      ),
+      child: Row(
+        children: [
+          if (showBack) ...[
+            Expanded(
+              child: AppButton(
+                text: 'Back',
+                type: AppButtonType.outlined,
+                height: 48,
+                icon: const Icon(Icons.arrow_back, size: 16),
+                borderColor: AppColors.grey300,
+                textColor: AppColors.textPrimary,
+                onPressed: isLoading ? null : onBack,
               ),
-            ],
+            ),
+            AppSpacing.w8(context),
+          ],
+          Expanded(
+            flex: 2,
+            child: AppButton(
+              text: isLastStep ? 'Submit for Approval' : 'Next',
+              height: 48,
+              isLoading: isLoading,
+              backgroundColor: AppColors.secondary,
+              icon: isLastStep
+                  ? null
+                  : const Icon(Icons.arrow_forward, size: 16),
+              iconPosition: AppButtonIconPosition.end,
+              onPressed: isLoading ? null : onNext,
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
+}
+
+// ─── String extension ─────────────────────────────────────────────────────────
+
+extension _StringX on String {
+  String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }

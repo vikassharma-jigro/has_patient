@@ -80,7 +80,6 @@ Future<void> _onRegisterSubmitted(
     switch (result) {
       case ApiSuccess(:final data):
         final inner = data['data'] as Map<String, dynamic>? ?? data;
-        print("heeeee>>>${inner}");
         // final accessToken = inner['accessToken'] as String? ?? '';
         // final refreshToken = inner['refreshToken'] as String? ?? '';
         // final user = inner['user'] as Map<String, dynamic>? ?? {};
@@ -120,7 +119,7 @@ Future<void> _onRegister1Submitted(
       insuranceSchemeName: event.insuranceSchemeName??"",
       insuranceType: event.insuranceType??"",
       seriousDiseases: event.seriousDiseases??[],
-      id: event.id,
+      id: event.id ?? "",
 
     );
 

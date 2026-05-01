@@ -275,6 +275,12 @@ class _LoginViewState extends State<_LoginView> {
                         );
                       },
                     ),
+                    AppSpacing.h16(context),
+                    AppButtonFactory.elevated(
+                      text: 'Register Patient',
+                      onPressed: () => context.push('/patient-registration'),
+                      textColor: AppColors.textOnPrimary,
+                    ),
                   ],
                 ),
               ),

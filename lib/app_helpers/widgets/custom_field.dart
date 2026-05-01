@@ -85,9 +85,22 @@ class _CustomFieldState<T> extends State<CustomField<T>>
   }
 
   @override
+  void didUpdateWidget(covariant CustomField<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      if (oldWidget.controller == null) {
+        _controller.dispose();
+      }
+      _initController();
+    }
+  }
+
+  @override
   void dispose() {
     _focusNode.dispose();
-    if (widget.controller == null) _controller.dispose();
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 

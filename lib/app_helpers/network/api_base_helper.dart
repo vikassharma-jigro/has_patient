@@ -153,11 +153,11 @@ class ApiBaseHelper {
     required String infection,
     required String insuranceSchemeName,
     required String insuranceType,
-    required int id,
+    required String id,
     required List<String> seriousDiseases,
   }) => _execute(
     () => _api.patch(
-      "${ApiUrls.register1}:$id",
+      "${ApiUrls.register1}$id",
       data: {
         'IDProofNumber': IDProofNumber,
         'IDProofType': IDProofType ,'insuranceNumber': insuranceNumber,
