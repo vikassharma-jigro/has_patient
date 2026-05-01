@@ -28,6 +28,17 @@ final class LoginSuccess extends LoginState {
   @override
   List<Object> get props => [accessToken, refreshToken, user];
 }
+final class RegisterSuccess extends LoginState {
+  final String message;
+
+
+  const RegisterSuccess({
+    required this.message,
+  });
+
+  @override
+  List<Object> get props => [message];
+}
 
 final class LoginFailure extends LoginState {
   final ApiError error;

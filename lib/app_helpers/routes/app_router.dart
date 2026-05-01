@@ -4,11 +4,13 @@ import 'package:hms_patient/presentation/pages/login_page.dart';
 import 'package:hms_patient/presentation/pages/new_booking.dart';
 import 'package:hms_patient/presentation/pages/paitent_registration_form.dart';
 import 'package:hms_patient/presentation/pages/profile_screen.dart';
+import 'package:hms_patient/presentation/pages/register_page1.dart';
 import 'package:hms_patient/presentation/pages/splash_page.dart';
 import 'package:hms_patient/presentation/widgets/bnb.dart';
 
 import '../../presentation/pages/my_booking.dart';
 import '../../presentation/pages/paitent_documents.dart';
+import '../../presentation/pages/register_page2.dart';
 
 class AppRouter {
   static final GlobalKey<NavigatorState> navigatorKey =
@@ -24,6 +26,8 @@ class AppRouter {
         builder: (context, state) => SplashPage(),
       ),
       GoRoute(path: '/login', builder: (context, state) => LoginPage()),
+      GoRoute(path: '/register', builder: (context, state) => RegisterPageScreen1()),
+      GoRoute(path: '/register1', builder: (context, state) => RegisterPageScreen2()),
       GoRoute(
         path: '/patient-registration',
         builder: (context, state) => PatientRegistrationForm(),

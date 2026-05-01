@@ -118,6 +118,57 @@ class ApiBaseHelper {
     ),
   );
 
+  Future<ApiResult<Map<String, dynamic>>> registerApi({
+    required String firstName,
+    required String gender,
+    required String lastName,
+    required String emailAddress,
+    required String dob,
+    required String age,
+    required String mobile,
+    required String address,
+    required String pincode,
+    required String state,
+    required String city,
+  }) => _execute(
+    () => _api.post(
+      ApiUrls.register,
+      data: {
+        'firstName': firstName,
+        'lastName': lastName ,'gender': gender,
+        'dob': dob ,'age': age,
+        'mobile': mobile ,'email': emailAddress,
+        'address': address ,'state': state,
+        'city': city ,'pincode': pincode,
+
+      },
+    ),
+  );
+
+  Future<ApiResult<Map<String, dynamic>>> register1Api({
+    required String IDProofNumber,
+    required String IDProofType,
+    required String insuranceNumber,
+    required String allergy,
+    required String infection,
+    required String insuranceSchemeName,
+    required String insuranceType,
+    required int id,
+    required List<String> seriousDiseases,
+  }) => _execute(
+    () => _api.patch(
+      "${ApiUrls.register1}:$id",
+      data: {
+        'IDProofNumber': IDProofNumber,
+        'IDProofType': IDProofType ,'insuranceNumber': insuranceNumber,
+        'allergy': allergy ,'infection': infection,
+        'insuranceSchemeName': insuranceSchemeName ,'insuranceType': insuranceType,
+        'seriousDiseases': seriousDiseases ,
+
+      },
+    ),
+  );
+
   Future<ApiResult<Map<String, dynamic>>> logout() =>
       _execute(() => _api.post(ApiUrls.logout));
 

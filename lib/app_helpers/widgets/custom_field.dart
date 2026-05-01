@@ -12,6 +12,7 @@ class CustomField<T> extends StatefulWidget {
     super.key,
     required this.hintText,
     this.controller,
+    this.maxL,
     this.validator,
     this.label,
     this.prefixIcon,
@@ -36,6 +37,7 @@ class CustomField<T> extends StatefulWidget {
   final String hintText;
   final TextStyle? hintstyle;
   final String? label;
+  final int? maxL;
   final TextInputType? keyboardType;
   final FormFieldValidator<String>? validator;
   final Widget? prefixIcon;
@@ -116,6 +118,7 @@ class _CustomFieldState<T> extends State<CustomField<T>>
     return TextFormField(
       textInputAction: widget.textInputAction,
       keyboardType: widget.keyboardType,
+      maxLength: widget.maxL,
       style: widget.enabled
           ? AppTypography.labelLarge
                 .withSize(15)
